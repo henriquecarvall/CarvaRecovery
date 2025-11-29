@@ -1,9 +1,10 @@
 package gui;
 
+import engine.FileRecoveryEngine;
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
-import java.util.Random;
+import java.util.List;
 
 public class RecoveryResults extends JFrame {
     private File selectedDevice;
@@ -13,13 +14,15 @@ public class RecoveryResults extends JFrame {
     private DefaultListModel<String> listModel;
     private JLabel statusLabel;
     private JLabel filesFoundLabel;
-    private boolean isScanning = false;
+    private FileRecoveryEngine recoveryEngine;
     private int filesFound = 0;
 
     public RecoveryResults(File device) {
         this.selectedDevice = device;
+        this.recoveryEngine = new FileRecoveryEngine(device);
         setupWindow();
         createUI();
+        setupRecoveryEngine();
         startRecoveryProcess();
     }
 
@@ -136,81 +139,50 @@ public class RecoveryResults extends JFrame {
         add(mainPanel);
     }
 
-    private void startRecoveryProcess() {
-        isScanning = true;
-
-        new Thread(() -> {
-            try {
-                simulateDeepRecovery();
-            } catch (Exception e) {
-                log("ERRO: " + e.getMessage());
-            } finally {
-                isScanning = false;
-                statusLabel.setText("Scan concluido!");
-            }
-        }).start();
-    }
-
-    private void simulateDeepRecovery() {
-        log("Iniciando scan profundo no dispositivo...");
-        log("Procurando por assinaturas de arquivos...");
-
-        Random random = new Random();
-        String[] fileTypes = {"foto", "documento", "video", "arquivo", "musica", "planilha"};
-        String[] extensions = {"jpg", "png", "pdf", "doc", "mp4", "zip", "mp3", "xlsx"};
-
-        int totalFiles = 80 + random.nextInt(70); // 80-150 arquivos
-
-        for (int i = 1; i <= totalFiles; i++) {
-            if (!isScanning) {
-                log("Scan interrompido pelo usuario");
-                break;
-            }
-
-            try {
-                // Simula tempo de processamento
-                Thread.sleep(100 + random.nextInt(200));
-
-                // Simula encontro de arquivo
-                String fileType = fileTypes[random.nextInt(fileTypes.length)];
-                String ext = extensions[random.nextInt(extensions.length)];
-                String fileName = fileType + "_recuperado_" + i + "." + ext;
-                long fileSize = 1024 * (500 + random.nextInt(5000)); // 500KB - 5MB
-
-                // Cria variaveis finais para usar no lambda
-                final String currentFileName = fileName;
-                final long currentFileSize = fileSize;
-                final int currentProgress = i;
-                final int currentTotalFiles = totalFiles;
-
-                // Atualiza interface
+    private void setupRecoveryEngine() {
+        recoveryEngine.setRecoveryListener(new FileRecoveryEngine.RecoveryListener() {
+            @Override
+            public void onFileFound(FileRecoveryEngine.RecoveredFileInfo fileInfo) {
                 SwingUtilities.invokeLater(() -> {
                     filesFound++;
-                    listModel.addElement(currentFileName + " (" + formatSize(currentFileSize) + ")");
+                    listModel.addElement(fileInfo.getFileName() + " (" + formatSize(fileInfo.getFileSize()) + ")");
                     filesFoundLabel.setText("Arquivos encontrados: " + filesFound);
-                    progressBar.setValue((currentProgress * 100) / currentTotalFiles);
-                    statusLabel.setText("Recuperando: " + currentFileName);
+                    log("ENCONTRADO: " + fileInfo.getFileName() + " - " + formatSize(fileInfo.getFileSize()));
                 });
-
-                log("Encontrado: " + fileName + " - " + formatSize(fileSize));
-
-            } catch (InterruptedException e) {
-                break;
             }
-        }
 
-        if (isScanning) {
-            SwingUtilities.invokeLater(() -> {
-                progressBar.setValue(100);
-                statusLabel.setText("Scan concluido! " + filesFound + " arquivos encontrados.");
-                log("Scan finalizado com sucesso!");
-            });
-        }
+            @Override
+            public void onProgressUpdate(int progress, String status) {
+                SwingUtilities.invokeLater(() -> {
+                    progressBar.setValue(progress);
+                    statusLabel.setText(status);
+                    if (progress % 10 == 0) { // Log a cada 10% para não poluir
+                        log("PROGRESSO: " + progress + "% - " + status);
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                SwingUtilities.invokeLater(() -> {
+                    log("ERRO: " + errorMessage);
+                    statusLabel.setText("Erro durante recuperacao");
+                });
+            }
+        });
+    }
+
+    private void startRecoveryProcess() {
+        log("INICIANDO MOTOR DE RECUPERACAO REAL...");
+        log("Dispositivo: " + selectedDevice.getAbsolutePath());
+        log("Procurando por assinaturas de arquivos...");
+
+        recoveryEngine.startDeepRecovery();
     }
 
     private void stopRecovery() {
-        isScanning = false;
-        log("Scan interrompido pelo usuario");
+        recoveryEngine.stopRecovery();
+        log("SCAN INTERROMPIDO PELO USUARIO");
         statusLabel.setText("Scan interrompido");
     }
 
@@ -231,48 +203,9 @@ public class RecoveryResults extends JFrame {
             File outputDir = chooser.getSelectedFile();
 
             new Thread(() -> {
-                try {
-                    saveFilesToDirectory(outputDir);
-                } catch (Exception e) {
-                    log("Erro ao salvar: " + e.getMessage());
-                }
+                recoveryEngine.saveAllRecoveredFiles(outputDir);
             }).start();
         }
-    }
-
-    private void saveFilesToDirectory(File outputDir) {
-        log("Iniciando salvamento de " + filesFound + " arquivos...");
-
-        if (!outputDir.exists()) {
-            outputDir.mkdirs();
-        }
-
-        int savedCount = 0;
-        for (int i = 0; i < filesFound; i++) {
-            try {
-                // Simula o salvamento de arquivo
-                String fileName = listModel.get(i).split(" ")[0];
-                File outputFile = new File(outputDir, fileName);
-
-                // Aqui seria a recuperacao REAL dos dados
-                Thread.sleep(50); // Simula tempo de salvamento
-
-                savedCount++;
-                log("Salvo: " + fileName);
-
-            } catch (Exception e) {
-                log("Falha ao salvar arquivo " + (i + 1));
-            }
-        }
-
-        log("Salvamento concluido! " + savedCount + "/" + filesFound + " arquivos salvos em: " + outputDir.getAbsolutePath());
-
-        JOptionPane.showMessageDialog(this,
-                "Recuperacao concluida!\n" +
-                        savedCount + " arquivos salvos em:\n" +
-                        outputDir.getAbsolutePath(),
-                "Sucesso",
-                JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void goBack() {

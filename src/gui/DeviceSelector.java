@@ -131,8 +131,23 @@ public class DeviceSelector extends JFrame {
         iconLabel.setFont(new Font("Segoe UI", Font.PLAIN, 24));
         iconLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 20));
 
+        // Botão de análise
+        JButton analyzeButton = new JButton("🔍 Analisar");
+        analyzeButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        analyzeButton.setBackground(new Color(0, 122, 204));
+        analyzeButton.setForeground(Color.WHITE);
+        analyzeButton.setFocusPainted(false);
+        analyzeButton.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        analyzeButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        analyzeButton.addActionListener(e -> {
+            new DeviceAnalysis(device).setVisible(true);
+            ((Window) SwingUtilities.getRoot(analyzeButton)).dispose();
+        });
+
         deviceButton.add(iconLabel, BorderLayout.WEST);
         deviceButton.add(textPanel, BorderLayout.CENTER);
+        deviceButton.add(analyzeButton, BorderLayout.EAST);
 
         // Efeito hover
         deviceButton.addMouseListener(new java.awt.event.MouseAdapter() {
