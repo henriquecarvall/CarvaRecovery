@@ -1,30 +1,26 @@
 import gui.MainFrame;
+import config.SettingsManager;
 import javax.swing.*;
 
 public class Main {
     public static void main(String[] args) {
-        // Tenta usar o visual Nimbus (moderno) ou usa o padrão
+        // Carrega configurações
+        SettingsManager.loadSettings();
+
+        // Configura o look and feel
         try {
-            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeel());
         } catch (Exception e) {
-            // Se não conseguir, usa o visual padrão do sistema
             try {
-                UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+                UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeel());
             } catch (Exception ex) {
-                // Ignora qualquer erro e usa o visual padrão
+                ex.printStackTrace();
             }
         }
 
-        // Cria e mostra a janela principal
-        SwingUtilities.invokeLater(new Runnable() {
-            public void run() {
-                new MainFrame().setVisible(true);
-            }
+        // Cria e exibe a janela principal
+        SwingUtilities.invokeLater(() -> {
+            new MainFrame().setVisible(true);
         });
     }
 }

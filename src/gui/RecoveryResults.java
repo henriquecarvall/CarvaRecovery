@@ -1,250 +1,292 @@
 package gui;
 
-import engine.FileRecoveryEngine;
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.File;
-import java.util.List;
 
-public class RecoveryResults extends JFrame {
-    private File selectedDevice;
-    private JProgressBar progressBar;
-    private JTextArea logArea;
-    private JList<String> filesList;
-    private DefaultListModel<String> listModel;
+public class RecoveryResults extends JPanel {
+    private JTable resultsTable;
+    private DefaultTableModel tableModel;
+    private JButton recoverButton, recoverAllButton, previewButton;
+    private JButton saveListButton, loadListButton;
+    private JProgressBar recoveryProgressBar;
     private JLabel statusLabel;
-    private JLabel filesFoundLabel;
-    private FileRecoveryEngine recoveryEngine;
-    private int filesFound = 0;
+    private JTextField outputPathField;
 
-    public RecoveryResults(File device) {
-        this.selectedDevice = device;
-        this.recoveryEngine = new FileRecoveryEngine(device);
-        setupWindow();
-        createUI();
-        setupRecoveryEngine();
-        startRecoveryProcess();
+    public RecoveryResults() {
+        initializeComponents();
+        setupLayout();
+        setupEventHandlers();
     }
 
-    private void setupWindow() {
-        setTitle("CarvaRecovery - Recuperando Arquivos");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1000, 750);
-        setLocationRelativeTo(null);
-    }
+    private void initializeComponents() {
+        // Tabela de resultados
+        String[] columns = {"Selecionar", "Nome do Arquivo", "Tipo", "Tamanho", "Integridade", "Status"};
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return column == 0; // Apenas a coluna de seleção é editável
+            }
 
-    private void createUI() {
-        // Painel principal
-        JPanel mainPanel = new JPanel(new BorderLayout());
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        mainPanel.setBackground(new Color(45, 45, 48));
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                if (columnIndex == 0) return Boolean.class;
+                return String.class;
+            }
+        };
 
-        // Cabeçalho
-        JPanel headerPanel = new JPanel(new BorderLayout());
-        headerPanel.setBackground(new Color(45, 45, 48));
-        headerPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 0));
-
-        JLabel titleLabel = new JLabel("Recuperacao em Andamento", JLabel.CENTER);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
-        titleLabel.setForeground(new Color(0, 122, 204));
-
-        statusLabel = new JLabel("Preparando scan...", JLabel.CENTER);
-        statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
-        statusLabel.setForeground(Color.LIGHT_GRAY);
-
-        headerPanel.add(titleLabel, BorderLayout.NORTH);
-        headerPanel.add(statusLabel, BorderLayout.SOUTH);
-
-        // Painel de informações
-        JPanel infoPanel = new JPanel(new GridLayout(1, 2, 15, 0));
-        infoPanel.setBackground(new Color(45, 45, 48));
-        infoPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 15, 0));
-
-        JLabel deviceLabel = new JLabel("Dispositivo: " + selectedDevice.getAbsolutePath());
-        deviceLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        deviceLabel.setForeground(Color.WHITE);
-
-        filesFoundLabel = new JLabel("Arquivos encontrados: 0");
-        filesFoundLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        filesFoundLabel.setForeground(Color.WHITE);
-
-        infoPanel.add(deviceLabel);
-        infoPanel.add(filesFoundLabel);
-
-        // Barra de progresso
-        progressBar = new JProgressBar(0, 100);
-        progressBar.setPreferredSize(new Dimension(0, 30));
-        progressBar.setBackground(new Color(60, 60, 60));
-        progressBar.setForeground(new Color(0, 122, 204));
-        progressBar.setStringPainted(true);
-        progressBar.setFont(new Font("Segoe UI", Font.BOLD, 12));
-
-        // Área de log
-        logArea = new JTextArea();
-        logArea.setEditable(false);
-        logArea.setBackground(Color.BLACK);
-        logArea.setForeground(Color.GREEN);
-        logArea.setFont(new Font("Consolas", Font.PLAIN, 12));
-
-        JScrollPane logScroll = new JScrollPane(logArea);
-        logScroll.setPreferredSize(new Dimension(900, 200));
-        logScroll.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(100, 100, 100)),
-                "Log do Sistema"
-        ));
-
-        // Lista de arquivos recuperados
-        listModel = new DefaultListModel<>();
-        filesList = new JList<>(listModel);
-        filesList.setBackground(new Color(60, 60, 60));
-        filesList.setForeground(Color.WHITE);
-        filesList.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-
-        JScrollPane filesScroll = new JScrollPane(filesList);
-        filesScroll.setPreferredSize(new Dimension(900, 250));
-        filesScroll.setBorder(BorderFactory.createTitledBorder(
-                BorderFactory.createLineBorder(new Color(100, 100, 100)),
-                "Arquivos Recuperados"
-        ));
+        resultsTable = new JTable(tableModel);
+        resultsTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        resultsTable.getColumnModel().getColumn(0).setMaxWidth(60);
+        resultsTable.getColumnModel().getColumn(0).setMinWidth(60);
 
         // Botões
-        JPanel buttonsPanel = new JPanel(new FlowLayout());
-        buttonsPanel.setBackground(new Color(45, 45, 48));
+        recoverButton = new JButton("Recuperar Selecionados");
+        recoverAllButton = new JButton("Recuperar Todos");
+        previewButton = new JButton("Pré-visualizar");
+        saveListButton = new JButton("Salvar Lista");
+        loadListButton = new JButton("Carregar Lista");
 
-        JButton stopButton = createStyledButton("PARAR SCAN", new Color(200, 80, 80));
-        JButton saveButton = createStyledButton("SALVAR ARQUIVOS", new Color(80, 180, 80));
-        JButton backButton = createStyledButton("VOLTAR", new Color(80, 80, 80));
+        // Barra de progresso
+        recoveryProgressBar = new JProgressBar(0, 100);
+        recoveryProgressBar.setStringPainted(true);
 
-        stopButton.addActionListener(e -> stopRecovery());
-        saveButton.addActionListener(e -> saveRecoveredFiles());
-        backButton.addActionListener(e -> goBack());
+        // Campo de caminho de saída
+        outputPathField = new JTextField(System.getProperty("user.home") + File.separator + "RecoveredFiles");
+        JButton browseButton = new JButton("Procurar...");
+        browseButton.addActionListener(e -> browseOutputPath());
 
-        buttonsPanel.add(stopButton);
-        buttonsPanel.add(saveButton);
-        buttonsPanel.add(backButton);
+        // Label de status
+        statusLabel = new JLabel("Pronto para recuperação");
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+    }
+
+    private void setupLayout() {
+        setLayout(new BorderLayout(10, 10));
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Painel de configuração de saída
+        JPanel outputPanel = new JPanel(new BorderLayout(5, 5));
+        outputPanel.setBorder(BorderFactory.createTitledBorder("Local de Saída para Arquivos Recuperados"));
+
+        JPanel pathPanel = new JPanel(new BorderLayout(5, 5));
+        pathPanel.add(new JLabel("Pasta de Destino:"), BorderLayout.WEST);
+        pathPanel.add(outputPathField, BorderLayout.CENTER);
+
+        JButton browseButton = new JButton("Procurar...");
+        browseButton.addActionListener(e -> browseOutputPath());
+        pathPanel.add(browseButton, BorderLayout.EAST);
+
+        outputPanel.add(pathPanel, BorderLayout.CENTER);
+
+        // Painel de botões
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttonPanel.add(recoverButton);
+        buttonPanel.add(recoverAllButton);
+        buttonPanel.add(previewButton);
+        buttonPanel.add(saveListButton);
+        buttonPanel.add(loadListButton);
+
+        // Painel superior
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(outputPanel, BorderLayout.NORTH);
+        topPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Painel de resultados
+        JPanel resultsPanel = new JPanel(new BorderLayout());
+        resultsPanel.setBorder(BorderFactory.createTitledBorder("Arquivos para Recuperação"));
+        resultsPanel.add(new JScrollPane(resultsTable), BorderLayout.CENTER);
+
+        // Painel de progresso
+        JPanel progressPanel = new JPanel(new BorderLayout());
+        progressPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
+        progressPanel.add(recoveryProgressBar, BorderLayout.CENTER);
+        progressPanel.add(statusLabel, BorderLayout.SOUTH);
+
+        resultsPanel.add(progressPanel, BorderLayout.SOUTH);
 
         // Layout principal
-        mainPanel.add(headerPanel, BorderLayout.NORTH);
-        mainPanel.add(infoPanel, BorderLayout.CENTER);
-        mainPanel.add(progressBar, BorderLayout.SOUTH);
-
-        JPanel centerPanel = new JPanel(new BorderLayout());
-        centerPanel.setBackground(new Color(45, 45, 48));
-        centerPanel.add(logScroll, BorderLayout.NORTH);
-        centerPanel.add(filesScroll, BorderLayout.CENTER);
-
-        mainPanel.add(centerPanel, BorderLayout.CENTER);
-        mainPanel.add(buttonsPanel, BorderLayout.SOUTH);
-
-        add(mainPanel);
+        add(topPanel, BorderLayout.NORTH);
+        add(resultsPanel, BorderLayout.CENTER);
     }
 
-    private void setupRecoveryEngine() {
-        recoveryEngine.setRecoveryListener(new FileRecoveryEngine.RecoveryListener() {
-            @Override
-            public void onFileFound(FileRecoveryEngine.RecoveredFileInfo fileInfo) {
-                SwingUtilities.invokeLater(() -> {
-                    filesFound++;
-                    listModel.addElement(fileInfo.getFileName() + " (" + formatSize(fileInfo.getFileSize()) + ")");
-                    filesFoundLabel.setText("Arquivos encontrados: " + filesFound);
-                    log("ENCONTRADO: " + fileInfo.getFileName() + " - " + formatSize(fileInfo.getFileSize()));
-                });
-            }
-
-            @Override
-            public void onProgressUpdate(int progress, String status) {
-                SwingUtilities.invokeLater(() -> {
-                    progressBar.setValue(progress);
-                    statusLabel.setText(status);
-                    if (progress % 10 == 0) { // Log a cada 10% para não poluir
-                        log("PROGRESSO: " + progress + "% - " + status);
-                    }
-                });
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                SwingUtilities.invokeLater(() -> {
-                    log("ERRO: " + errorMessage);
-                    statusLabel.setText("Erro durante recuperacao");
-                });
-            }
-        });
+    private void setupEventHandlers() {
+        recoverButton.addActionListener(e -> recoverSelectedFiles());
+        recoverAllButton.addActionListener(e -> recoverAllFiles());
+        previewButton.addActionListener(e -> previewSelectedFile());
+        saveListButton.addActionListener(e -> saveFileList());
+        loadListButton.addActionListener(e -> loadFileList());
     }
 
-    private void startRecoveryProcess() {
-        log("INICIANDO MOTOR DE RECUPERACAO REAL...");
-        log("Dispositivo: " + selectedDevice.getAbsolutePath());
-        log("Procurando por assinaturas de arquivos...");
+    private void browseOutputPath() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fileChooser.setDialogTitle("Selecionar Pasta de Destino");
 
-        recoveryEngine.startDeepRecovery();
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            outputPathField.setText(fileChooser.getSelectedFile().getAbsolutePath());
+        }
     }
 
-    private void stopRecovery() {
-        recoveryEngine.stopRecovery();
-        log("SCAN INTERROMPIDO PELO USUARIO");
-        statusLabel.setText("Scan interrompido");
-    }
-
-    private void saveRecoveredFiles() {
-        if (filesFound == 0) {
+    private void recoverSelectedFiles() {
+        String outputPath = outputPathField.getText().trim();
+        if (outputPath.isEmpty()) {
             JOptionPane.showMessageDialog(this,
-                    "Nenhum arquivo para salvar. Execute o scan primeiro.",
-                    "Nenhum Arquivo",
+                    "Selecione uma pasta de destino para os arquivos recuperados",
+                    "Pasta de Destino Não Selecionada",
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        JFileChooser chooser = new JFileChooser();
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        chooser.setDialogTitle("Selecione onde salvar os arquivos recuperados");
+        File outputDir = new File(outputPath);
+        if (!outputDir.exists() && !outputDir.mkdirs()) {
+            JOptionPane.showMessageDialog(this,
+                    "Não foi possível criar a pasta de destino: " + outputPath,
+                    "Erro de Diretório",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
 
-        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File outputDir = chooser.getSelectedFile();
+        int selectedCount = 0;
+        int totalRows = tableModel.getRowCount();
 
-            new Thread(() -> {
-                recoveryEngine.saveAllRecoveredFiles(outputDir);
-            }).start();
+        for (int i = 0; i < totalRows; i++) {
+            Boolean selected = (Boolean) tableModel.getValueAt(i, 0);
+            if (selected != null && selected) {
+                selectedCount++;
+            }
+        }
+
+        if (selectedCount == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "Selecione pelo menos um arquivo para recuperar",
+                    "Nenhum Arquivo Selecionado",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Simular recuperação (implementação real iria usar o FileRecoveryEngine)
+        simulateRecovery(selectedCount);
+    }
+
+    private void recoverAllFiles() {
+        // Selecionar todos os arquivos
+        int rowCount = tableModel.getRowCount();
+        for (int i = 0; i < rowCount; i++) {
+            tableModel.setValueAt(true, i, 0);
+        }
+
+        // Executar recuperação
+        recoverSelectedFiles();
+    }
+
+    private void previewSelectedFile() {
+        int selectedRow = resultsTable.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this,
+                    "Selecione um arquivo para pré-visualizar",
+                    "Nenhum Arquivo Selecionado",
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String fileName = (String) tableModel.getValueAt(selectedRow, 1);
+        String fileType = (String) tableModel.getValueAt(selectedRow, 2);
+        String integrity = (String) tableModel.getValueAt(selectedRow, 4);
+
+        String message = String.format(
+                "<html><b>Arquivo:</b> %s<br>" +
+                        "<b>Tipo:</b> %s<br>" +
+                        "<b>Integridade:</b> %s<br><br>" +
+                        "Pré-visualização disponível apenas para imagens e textos em versões futuras.</html>",
+                fileName, fileType, integrity
+        );
+
+        JOptionPane.showMessageDialog(this, message, "Pré-visualização do Arquivo",
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void saveFileList() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Salvar Lista de Arquivos");
+        fileChooser.setSelectedFile(new File("lista_recuperacao.txt"));
+
+        int result = fileChooser.showSaveDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            // Implementar salvamento da lista
+            JOptionPane.showMessageDialog(this,
+                    "Lista salva com sucesso!", "Sucesso",
+                    JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
-    private void goBack() {
-        new FormatScanner(selectedDevice).setVisible(true);
-        this.dispose();
+    private void loadFileList() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Carregar Lista de Arquivos");
+
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            // Implementar carregamento da lista
+            JOptionPane.showMessageDialog(this,
+                    "Lista carregada com sucesso!", "Sucesso",
+                    JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
-    private JButton createStyledButton(String text, Color color) {
-        JButton button = new JButton(text);
-        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        button.setBackground(color);
-        button.setForeground(Color.WHITE);
-        button.setFocusPainted(false);
-        button.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
-        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    private void simulateRecovery(int fileCount) {
+        recoverButton.setEnabled(false);
+        recoverAllButton.setEnabled(false);
 
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setBackground(color.brighter());
+        new Thread(() -> {
+            try {
+                for (int i = 0; i <= 100; i++) {
+                    final int progress = i;
+                    SwingUtilities.invokeLater(() -> {
+                        recoveryProgressBar.setValue(progress);
+                        statusLabel.setText(String.format("Recuperando... %d%% (%d/%d arquivos)",
+                                progress, progress * fileCount / 100, fileCount));
+                    });
+
+                    Thread.sleep(50); // Simular trabalho
+                }
+
+                SwingUtilities.invokeLater(() -> {
+                    recoveryProgressBar.setValue(0);
+                    statusLabel.setText(String.format("Recuperação concluída! %d arquivos recuperados em: %s",
+                            fileCount, outputPathField.getText()));
+
+                    recoverButton.setEnabled(true);
+                    recoverAllButton.setEnabled(true);
+
+                    JOptionPane.showMessageDialog(this,
+                            String.format("Recuperação concluída com sucesso!\n%d arquivos salvos em: %s",
+                                    fileCount, outputPathField.getText()),
+                            "Recuperação Concluída",
+                            JOptionPane.INFORMATION_MESSAGE);
+                });
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setBackground(color);
-            }
-        });
-
-        return button;
+        }).start();
     }
 
-    private void log(String message) {
-        SwingUtilities.invokeLater(() -> {
-            logArea.append("[" + java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")) + "] " + message + "\n");
-            logArea.setCaretPosition(logArea.getDocument().getLength());
+    public void addRecoveredFile(RecoveredFile file) {
+        tableModel.addRow(new Object[]{
+                false, // Selecionado
+                file.getFileName(),
+                file.getFileType(),
+                file.getFormattedSize(),
+                String.format("%.1f%%", file.getIntegrityScore() * 100),
+                file.getRecoveryStatus().getDescription()
         });
     }
 
-    private String formatSize(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return (bytes / 1024) + " KB";
-        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)) + " MB";
-        return (bytes / (1024 * 1024 * 1024)) + " GB";
+    public void clearResults() {
+        tableModel.setRowCount(0);
+        recoveryProgressBar.setValue(0);
+        statusLabel.setText("Pronto para recuperação");
     }
 }

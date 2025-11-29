@@ -1,221 +1,262 @@
 package gui;
 
+import engine.FileRecoveryEngine;
+
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
 
-public class FormatScanner extends JFrame {
-    private File selectedDevice;
+public class FormatScanner extends JPanel {
+    private FileRecoveryEngine recoveryEngine;
+    private JCheckBox jpgCheckBox, pngCheckBox, pdfCheckBox, docCheckBox;
+    private JCheckBox mp3CheckBox, mp4CheckBox, zipCheckBox, allFormatsCheckBox;
+    private JButton scanButton, stopButton;
+    private JProgressBar progressBar;
+    private JTable resultsTable;
+    private DefaultTableModel tableModel;
+    private JLabel statusLabel;
 
-    public FormatScanner(File device) {
-        this.selectedDevice = device;
-        setupWindow();
-        createUI();
+    public FormatScanner() {
+        recoveryEngine = new FileRecoveryEngine();
+        initializeComponents();
+        setupLayout();
+        setupEventHandlers();
     }
 
-    private void setupWindow() {
-        setTitle("CarvaRecovery - Selecione os Formatos");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(900, 700);
-        setLocationRelativeTo(null);
-    }
-
-    private void createUI() {
-        // Painel principal
-        JPanel mainPanel = new JPanel(new BorderLayout());
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(25, 25, 25, 25));
-        mainPanel.setBackground(new Color(45, 45, 48));
-
-        // Título
-        JLabel titleLabel = new JLabel("Selecione os Formatos para Recuperar", JLabel.CENTER);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
-        titleLabel.setForeground(new Color(0, 122, 204));
-        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 0));
-
-        // Informações do dispositivo
-        JLabel deviceLabel = new JLabel("Dispositivo: " + selectedDevice.getAbsolutePath(), JLabel.CENTER);
-        deviceLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
-        deviceLabel.setForeground(Color.LIGHT_GRAY);
-        deviceLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 30, 0));
-
-        // Painel de formatos
-        JPanel formatsPanel = createFormatsPanel();
-
-        // Painel de visualização de blocos
-        JPanel blocksPanel = createBlocksPanel();
+    private void initializeComponents() {
+        // Checkboxes de formatos
+        jpgCheckBox = new JCheckBox("JPEG (.jpg, .jpeg)");
+        pngCheckBox = new JCheckBox("PNG (.png)");
+        pdfCheckBox = new JCheckBox("PDF (.pdf)");
+        docCheckBox = new JCheckBox("Documentos (.doc, .docx)");
+        mp3CheckBox = new JCheckBox("Áudio MP3 (.mp3)");
+        mp4CheckBox = new JCheckBox("Vídeo MP4 (.mp4)");
+        zipCheckBox = new JCheckBox("Arquivos ZIP (.zip)");
+        allFormatsCheckBox = new JCheckBox("Todos os Formatos");
 
         // Botões
-        JPanel buttonsPanel = new JPanel(new FlowLayout());
-        buttonsPanel.setBackground(new Color(45, 45, 48));
+        scanButton = new JButton("Iniciar Varredura");
+        stopButton = new JButton("Parar");
+        stopButton.setEnabled(false);
 
-        JButton scanButton = createStyledButton("INICIAR SCAN PROFUNDO", new Color(0, 122, 204));
-        JButton backButton = createStyledButton("VOLTAR", new Color(80, 80, 80));
+        // Barra de progresso
+        progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
 
-        scanButton.addActionListener(e -> startRecovery());
-        backButton.addActionListener(e -> goBack());
+        // Tabela de resultados
+        String[] columns = {"Nome do Arquivo", "Tipo", "Tamanho", "Integridade", "Status"};
+        tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
 
-        buttonsPanel.add(backButton);
-        buttonsPanel.add(scanButton);
-
-        // Layout com abas
-        JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.setBackground(new Color(45, 45, 48));
-        tabbedPane.setForeground(Color.WHITE);
-
-        tabbedPane.addTab("Formatos de Arquivo", formatsPanel);
-        tabbedPane.addTab("Visualizacao de Blocos", blocksPanel);
-
-        mainPanel.add(titleLabel, BorderLayout.NORTH);
-        mainPanel.add(deviceLabel, BorderLayout.CENTER);
-        mainPanel.add(tabbedPane, BorderLayout.CENTER);
-        mainPanel.add(buttonsPanel, BorderLayout.SOUTH);
-
-        add(mainPanel);
-    }
-
-    private JPanel createFormatsPanel() {
-        JPanel panel = new JPanel(new GridLayout(2, 3, 15, 15));
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        panel.setBackground(new Color(60, 60, 60));
-
-        // Formatos disponíveis
-        String[] formats = {
-                "JPEG/ JPG", "PNG", "PDF",
-                "ZIP/ RAR", "TXT/ DOC", "MP4/ AVI"
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                return String.class;
+            }
         };
 
-        for (int i = 0; i < formats.length; i++) {
-            JButton formatButton = createFormatButton(formats[i]);
-            panel.add(formatButton);
-        }
+        resultsTable = new JTable(tableModel);
+        resultsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        return panel;
+        // Label de status
+        statusLabel = new JLabel("Pronto para escanear");
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
     }
 
-    private JButton createFormatButton(String format) {
-        JButton button = new JButton("<html><center>" + format + "</center></html>");
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        button.setBackground(new Color(80, 80, 80));
-        button.setForeground(Color.WHITE);
-        button.setFocusPainted(false);
-        button.setBorder(BorderFactory.createEmptyBorder(20, 10, 20, 10));
-        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+    private void setupLayout() {
+        setLayout(new BorderLayout(10, 10));
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Efeito hover
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(0, 122, 204));
-            }
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(80, 80, 80));
-            }
+        // Painel de formatos
+        JPanel formatPanel = new JPanel(new GridLayout(0, 2, 5, 5));
+        formatPanel.setBorder(BorderFactory.createTitledBorder("Formatos para Recuperar"));
+
+        formatPanel.add(jpgCheckBox);
+        formatPanel.add(pngCheckBox);
+        formatPanel.add(pdfCheckBox);
+        formatPanel.add(docCheckBox);
+        formatPanel.add(mp3CheckBox);
+        formatPanel.add(mp4CheckBox);
+        formatPanel.add(zipCheckBox);
+        formatPanel.add(allFormatsCheckBox);
+
+        // Painel de controles
+        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        controlPanel.add(scanButton);
+        controlPanel.add(stopButton);
+        controlPanel.add(progressBar);
+
+        // Painel principal norte
+        JPanel northPanel = new JPanel(new BorderLayout());
+        northPanel.add(formatPanel, BorderLayout.CENTER);
+        northPanel.add(controlPanel, BorderLayout.SOUTH);
+
+        // Painel de resultados
+        JPanel resultsPanel = new JPanel(new BorderLayout());
+        resultsPanel.setBorder(BorderFactory.createTitledBorder("Arquivos Encontrados"));
+        resultsPanel.add(new JScrollPane(resultsTable), BorderLayout.CENTER);
+        resultsPanel.add(statusLabel, BorderLayout.SOUTH);
+
+        // Layout principal
+        add(northPanel, BorderLayout.NORTH);
+        add(resultsPanel, BorderLayout.CENTER);
+    }
+
+    private void setupEventHandlers() {
+        allFormatsCheckBox.addActionListener(e -> {
+            boolean selected = allFormatsCheckBox.isSelected();
+            jpgCheckBox.setSelected(selected);
+            pngCheckBox.setSelected(selected);
+            pdfCheckBox.setSelected(selected);
+            docCheckBox.setSelected(selected);
+            mp3CheckBox.setSelected(selected);
+            mp4CheckBox.setSelected(selected);
+            zipCheckBox.setSelected(selected);
         });
 
-        return button;
-    }
+        scanButton.addActionListener(e -> startScanning());
+        stopButton.addActionListener(e -> stopScanning());
 
-    private JPanel createBlocksPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        panel.setBackground(new Color(60, 60, 60));
-
-        // Título da visualização
-        JLabel titleLabel = new JLabel("Mapa de Blocos do Dispositivo", JLabel.CENTER);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        titleLabel.setForeground(Color.WHITE);
-        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 0));
-
-        // Painel de blocos (simulação)
-        JPanel blocksVisualization = new JPanel(new GridLayout(10, 15, 2, 2));
-        blocksVisualization.setBackground(new Color(45, 45, 48));
-        blocksVisualization.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        // Cria blocos coloridos (simulação)
-        for (int i = 0; i < 150; i++) {
-            JLabel block = new JLabel();
-            block.setOpaque(true);
-            block.setBorder(BorderFactory.createLineBorder(new Color(30, 30, 30)));
-
-            // Simula blocos com dados (verde) e vazios (cinza)
-            if (Math.random() > 0.3) {
-                block.setBackground(new Color(40, 180, 40)); // Verde - com dados
-            } else {
-                block.setBackground(new Color(100, 100, 100)); // Cinza - vazio
+        // Listener para atualização de progresso
+        recoveryEngine.setProgressListener(new FileRecoveryEngine.RecoveryProgressListener() {
+            @Override
+            public void onProgressUpdate(int progress, long bytesScanned, long totalBytes) {
+                SwingUtilities.invokeLater(() -> {
+                    progressBar.setValue(progress);
+                    statusLabel.setText(String.format("Escaneando... %d%% (%s de %s)",
+                            progress, formatSize(bytesScanned), formatSize(totalBytes)));
+                });
             }
 
-            blocksVisualization.add(block);
-        }
-
-        // Legenda
-        JPanel legendPanel = new JPanel(new FlowLayout());
-        legendPanel.setBackground(new Color(60, 60, 60));
-
-        JLabel greenLegend = createLegendLabel(new Color(40, 180, 40), "Blocos com dados recuperaveis");
-        JLabel grayLegend = createLegendLabel(new Color(100, 100, 100), "Blocos vazios/sobrescritos");
-
-        legendPanel.add(greenLegend);
-        legendPanel.add(Box.createRigidArea(new Dimension(20, 0)));
-        legendPanel.add(grayLegend);
-
-        panel.add(titleLabel, BorderLayout.NORTH);
-        panel.add(blocksVisualization, BorderLayout.CENTER);
-        panel.add(legendPanel, BorderLayout.SOUTH);
-
-        return panel;
-    }
-
-    private JLabel createLegendLabel(Color color, String text) {
-        JPanel legendItem = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        legendItem.setBackground(new Color(60, 60, 60));
-
-        JLabel colorBox = new JLabel();
-        colorBox.setOpaque(true);
-        colorBox.setBackground(color);
-        colorBox.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
-        colorBox.setPreferredSize(new Dimension(20, 20));
-
-        JLabel textLabel = new JLabel(text);
-        textLabel.setForeground(Color.LIGHT_GRAY);
-        textLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-
-        legendItem.add(colorBox);
-        legendItem.add(textLabel);
-
-        JLabel container = new JLabel();
-        container.setLayout(new BorderLayout());
-        container.add(legendItem, BorderLayout.WEST);
-        return container;
-    }
-
-    private JButton createStyledButton(String text, Color color) {
-        JButton button = new JButton(text);
-        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        button.setBackground(color);
-        button.setForeground(Color.WHITE);
-        button.setFocusPainted(false);
-        button.setBorder(BorderFactory.createEmptyBorder(12, 25, 12, 25));
-        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setBackground(color.brighter());
+            @Override
+            public void onFileFound(RecoveredFile file) {
+                SwingUtilities.invokeLater(() -> addFileToTable(file));
             }
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setBackground(color);
+
+            @Override
+            public void onRecoveryProgress(RecoveredFile file, int progress) {
+                // Não usado na varredura
             }
         });
-
-        return button;
     }
 
-    private void startRecovery() {
-        // AGORA CHAMA A TELA REAL DE RECUPERAÇÃO
-        new RecoveryResults(selectedDevice).setVisible(true);
-        this.dispose();
+    private void startScanning() {
+        if (getSelectedDevice() == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Selecione um dispositivo primeiro na aba 'Análise do Dispositivo'",
+                    "Dispositivo Não Selecionado",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Set<String> selectedFormats = getSelectedFormats();
+        if (selectedFormats.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Selecione pelo menos um formato de arquivo para recuperar",
+                    "Nenhum Formato Selecionado",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Limpar resultados anteriores
+        tableModel.setRowCount(0);
+
+        // Configurar interface para escaneamento
+        scanButton.setEnabled(false);
+        stopButton.setEnabled(true);
+        progressBar.setValue(0);
+
+        // Executar escaneamento em thread separada
+        new Thread(() -> {
+            var recoveredFiles = recoveryEngine.scanForDeletedFiles(getSelectedDevice(), selectedFormats);
+
+            SwingUtilities.invokeLater(() -> {
+                scanButton.setEnabled(true);
+                stopButton.setEnabled(false);
+                statusLabel.setText(String.format("Varredura concluída! %d arquivos encontrados.", recoveredFiles.size()));
+            });
+        }).start();
     }
 
-    private void goBack() {
-        new DeviceSelector().setVisible(true);
-        this.dispose();
+    private void stopScanning() {
+        recoveryEngine.stopScanning();
+        scanButton.setEnabled(true);
+        stopButton.setEnabled(false);
+        statusLabel.setText("Varredura interrompida pelo usuário");
+    }
+
+    private Set<String> getSelectedFormats() {
+        Set<String> formats = new HashSet<>();
+
+        if (allFormatsCheckBox.isSelected() || jpgCheckBox.isSelected()) {
+            formats.add("jpg");
+            formats.add("jpeg");
+        }
+        if (allFormatsCheckBox.isSelected() || pngCheckBox.isSelected()) {
+            formats.add("png");
+        }
+        if (allFormatsCheckBox.isSelected() || pdfCheckBox.isSelected()) {
+            formats.add("pdf");
+        }
+        if (allFormatsCheckBox.isSelected() || docCheckBox.isSelected()) {
+            formats.add("doc");
+            formats.add("docx");
+        }
+        if (allFormatsCheckBox.isSelected() || mp3CheckBox.isSelected()) {
+            formats.add("mp3");
+        }
+        if (allFormatsCheckBox.isSelected() || mp4CheckBox.isSelected()) {
+            formats.add("mp4");
+        }
+        if (allFormatsCheckBox.isSelected() || zipCheckBox.isSelected()) {
+            formats.add("zip");
+            formats.add("rar");
+            formats.add("7z");
+        }
+
+        return formats;
+    }
+
+    private void addFileToTable(RecoveredFile file) {
+        tableModel.addRow(new Object[]{
+                file.getFileName(),
+                file.getFileType(),
+                file.getFormattedSize(),
+                String.format("%.1f%%", file.getIntegrityScore() * 100),
+                file.getRecoveryStatus().getDescription()
+        });
+    }
+
+    private String getSelectedDevice() {
+        // Obter o dispositivo selecionado da aba de análise
+        MainFrame mainFrame = (MainFrame) SwingUtilities.getWindowAncestor(this);
+        if (mainFrame != null) {
+            return mainFrame.getSelectedDevice();
+        }
+        return null;
+    }
+
+    private String formatSize(long bytes) {
+        if (bytes >= 1_000_000_000_000L) {
+            return String.format("%.2f TB", bytes / 1_000_000_000_000.0);
+        } else if (bytes >= 1_000_000_000L) {
+            return String.format("%.2f GB", bytes / 1_000_000_000.0);
+        } else if (bytes >= 1_000_000L) {
+            return String.format("%.2f MB", bytes / 1_000_000.0);
+        } else if (bytes >= 1_000L) {
+            return String.format("%.2f KB", bytes / 1_000.0);
+        } else {
+            return bytes + " B";
+        }
+    }
+
+    public java.util.List<RecoveredFile> getSelectedFiles() {
+        // Retornar arquivos selecionados para recuperação
+        // Implementação simplificada
+        return java.util.Collections.emptyList();
     }
 }
